@@ -6,6 +6,7 @@ import { ContactsService } from 'src/contacts/contacts.service';
 import { Repository } from 'typeorm';
 import { DealsEntity } from './entity/deals.entity';
 import { CreateDealDto } from './dto/createDeal.dto';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class DealsService {
@@ -14,6 +15,7 @@ export class DealsService {
     private readonly dealsRepo: Repository<DealsEntity>,
     private readonly contactsService: ContactsService,
     private readonly amoService: AmoService,
+    private readonly http: HttpService,
   ) {}
 
   async findOrCreateDeal({
@@ -21,35 +23,51 @@ export class DealsService {
     contactName,
     contactPhone,
   }: CreateDealDto) {
-    let deal = await this.dealsRepo.findOne({ where: { name: dealName } });
-    if (deal) return { status: 'exists', deal };
+    const existing = await this.dealsRepo.findOne({
+      where: { name: dealName },
+      relations: ['contacts'],
+    });
+    if (existing) return { status: 'exists', existing };
 
     const contact = await this.contactsService.findOrCreate({
       name: contactName,
       phone: contactPhone,
     });
-    const token = await this.amoService.getValidToken();
-    const http = this.amoService['http'].axiosRef;
 
-    const createResp = await http.post(
+    if (!contact.amoId) throw new Error('Contact has no amoId after create');
+
+    const token = await this.amoService.getValidToken();
+    const headers = {
+      Authorization: `Bearer ${token.accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+
+    const payload = [
+      {
+        name: dealName,
+        _embedded: { contacts: [{ id: contact.amoId }] },
+      },
+    ];
+
+    const created = await this.http.axiosRef.post(
       `https://${token.baseDomain}/api/v4/leads`,
-      [
-        {
-          name: contactName,
-          status_id: null,
-          _embedded: { contacts: [{ id: contact.amoId }] },
-        },
-      ],
-      { headers: { Authorization: `Bearer ${token.accessToken}` } },
+      payload,
+      { headers },
     );
 
-    const newAmoId = createResp.data._embedded.leads[0].id;
-    deal = this.dealsRepo.create({
-      amoId: newAmoId,
-      name: contactName,
+    const amoLead = created.data?._embedded?.leads?.[0];
+    if (!amoLead?.id) throw new Error('Failed to create deal in amoCRM');
+
+    const deal = this.dealsRepo.create({
+      amoId: amoLead.id,
+      name: dealName,
       status: DealStatus.NEW,
+      pipelineStageId: amoLead.status_id ?? null,
       contacts: [contact],
     });
-    return { status: 'created', deal: await this.dealsRepo.save(deal) };
+    const saved = await this.dealsRepo.save(deal);
+
+    return { status: 'created', deal: saved };
   }
 }
