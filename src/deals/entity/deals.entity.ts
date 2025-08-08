@@ -1,5 +1,5 @@
 import { DealStatus } from 'src/common/enum/dealStatus.enum';
-import { Contact } from 'src/contacts/entity/contacts.entity';
+import { ContactsEntity } from 'src/contacts/entity/contacts.entity';
 import {
   Column,
   CreateDateColumn,
@@ -12,7 +12,7 @@ import {
 } from 'typeorm';
 
 @Entity('deals')
-export class DealEntity {
+export class DealsEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -34,13 +34,13 @@ export class DealEntity {
   @Column({ type: 'int', default: null })
   pipelineStageId: number | null;
 
-  @ManyToMany(() => Contact, { cascade: false })
+  @ManyToMany(() => ContactsEntity, { cascade: false })
   @JoinTable({
     name: 'deal_contacts',
     joinColumn: { name: 'deal_id', referencedColumnName: 'id' },
     inverseJoinColumn: { name: 'contact_id', referencedColumnName: 'id' },
   })
-  contacts: Contact[];
+  contacts: ContactsEntity[];
 
   @CreateDateColumn()
   createdAt: Date;
