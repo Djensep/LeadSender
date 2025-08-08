@@ -11,10 +11,10 @@ export class AmoEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ type: 'text' })
   accessToken: string;
 
-  @Column()
+  @Column({ type: 'text' })
   refreshToken: string;
 
   @Column()
